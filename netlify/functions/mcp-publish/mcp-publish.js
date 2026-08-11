@@ -1,4 +1,4 @@
-import { handleMcpRequest } from "./mcp-core.js";
+import { handleWebhookRequest } from "./webhook-core.js";
 
 // Classic Lambda-compatible Netlify Function handler.
 export const handler = async (event) => {
@@ -8,7 +8,7 @@ export const handler = async (event) => {
       : event.body
     : null;
 
-  const { status, body } = await handleMcpRequest({
+  const { status, body } = await handleWebhookRequest({
     method: event.httpMethod,
     headers: event.headers || {},
     rawBody,

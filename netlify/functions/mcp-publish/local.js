@@ -1,9 +1,9 @@
 // Plain local runner, independent of the Netlify CLI. Prefer `netlify dev`
 // from the repo root for local testing (it matches the deployed runtime
 // and serves the static site at the same time) — this is a fallback for
-// quickly exercising mcp-core.js directly.
+// quickly exercising webhook-core.js directly.
 import http from "node:http";
-import { handleMcpRequest } from "./mcp-core.js";
+import { handleWebhookRequest } from "./webhook-core.js";
 import { env } from "./env.js";
 
 const server = http.createServer(async (req, res) => {
@@ -11,7 +11,7 @@ const server = http.createServer(async (req, res) => {
   for await (const chunk of req) chunks.push(chunk);
   const rawBody = chunks.length ? Buffer.concat(chunks).toString("utf8") : null;
 
-  const { status, body } = await handleMcpRequest({
+  const { status, body } = await handleWebhookRequest({
     method: req.method,
     headers: req.headers,
     rawBody,

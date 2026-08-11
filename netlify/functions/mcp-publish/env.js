@@ -3,6 +3,7 @@ const required = [
   "GITHUB_TOKEN",
   "GITHUB_OWNER",
   "GITHUB_REPO",
+  "ANTHROPIC_API_KEY",
 ];
 
 for (const key of required) {
@@ -19,4 +20,5 @@ export const env = {
   githubRepo: process.env.GITHUB_REPO,
   githubBranch: process.env.GITHUB_BRANCH || "main",
   siteBaseUrl: process.env.SITE_BASE_URL || null,
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 };

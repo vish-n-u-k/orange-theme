@@ -1,66 +1,47 @@
-import { parseCanonicalSlug } from "./extract.js";
+const MIN_BODY_LENGTH = 200; // Frekto sends 400-600 words; this just catches empty/garbage.
+const RECOMMENDED_MAX_META_DESCRIPTION = 300;
 
-const MIN_BODY_TEXT_LENGTH = 200;
-
-// Every check here blocks the publish. There is no human review step in
-// this pipeline (unlike a normal CMS draft), so anything that would
-// normally be a soft warning-before-a-human-looks-at-it becomes a hard
-// error instead.
-export function validatePost($) {
+// Frekto is the only caller and there's no human review before this commits
+// to main, so every field it's expected to send becomes a hard requirement
+// here rather than a best-effort default.
+export function validateInput(input) {
   const errors = [];
   const warnings = [];
 
-  const title = ($("title").first().text() || "").trim();
-  if (!title) errors.push('Missing or empty <title>.');
-
-  const metaDescription = $('meta[name="description"]').first().attr("content");
-  if (!metaDescription || !metaDescription.trim()) {
-    errors.push('Missing or empty <meta name="description">.');
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { valid: false, errors: ['Missing or invalid "input" object.'], warnings: [] };
   }
 
-  const canonicalHref = $('link[rel="canonical"]').first().attr("href");
-  const { slug, error: canonicalError } = parseCanonicalSlug(canonicalHref);
-  if (canonicalError) {
-    errors.push(`Invalid <link rel="canonical">: ${canonicalError}`);
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  if (!title) errors.push('Missing or empty "title".');
+
+  const body = typeof input.body === "string" ? input.body.trim() : "";
+  if (!body) {
+    errors.push('Missing or empty "body".');
+  } else if (body.length < MIN_BODY_LENGTH) {
+    errors.push(`"body" is only ${body.length} characters (minimum ${MIN_BODY_LENGTH}) — too short to be a real post.`);
   }
 
-  const ogTitle = $('meta[property="og:title"]').first().attr("content");
-  if (!ogTitle || !ogTitle.trim()) errors.push('Missing or empty <meta property="og:title">.');
-
-  const ogDescription = $('meta[property="og:description"]').first().attr("content");
-  if (!ogDescription || !ogDescription.trim()) {
-    errors.push('Missing or empty <meta property="og:description">.');
+  const metaDescription = typeof input.meta_description === "string" ? input.meta_description.trim() : "";
+  if (!metaDescription) {
+    errors.push('Missing or empty "meta_description".');
+  } else if (metaDescription.length > RECOMMENDED_MAX_META_DESCRIPTION) {
+    warnings.push(`"meta_description" is ${metaDescription.length} characters, longer than the recommended ~160.`);
   }
 
-  const publishedAt =
-    $('meta[property="article:published_time"]').first().attr("content") ||
-    $("time[datetime]").first().attr("datetime");
-  if (!publishedAt) {
-    errors.push(
-      'Missing publish date: need <meta property="article:published_time" content="ISO-8601"> or a <time datetime="...">.'
-    );
-  } else if (Number.isNaN(Date.parse(publishedAt))) {
-    errors.push(`Publish date "${publishedAt}" is not a valid date.`);
+  if (input.tags !== undefined && input.tags !== null) {
+    if (!Array.isArray(input.tags) || input.tags.some((t) => typeof t !== "string")) {
+      errors.push('"tags" must be an array of strings.');
+    }
   }
 
-  const bodyText = $("body").text().replace(/\s+/g, " ").trim();
-  if (bodyText.length < MIN_BODY_TEXT_LENGTH) {
-    errors.push(
-      `<body> text content is only ${bodyText.length} characters (minimum ${MIN_BODY_TEXT_LENGTH}) — looks empty or malformed.`
-    );
+  if (input.featured_image !== undefined && input.featured_image !== null && typeof input.featured_image !== "string") {
+    errors.push('"featured_image" must be a string URL.');
   }
 
-  const charset = $("meta[charset]").first().attr("charset");
-  if (!charset) warnings.push("No <meta charset> found; assuming UTF-8.");
+  if (input.primary_keyword !== undefined && input.primary_keyword !== null && typeof input.primary_keyword !== "string") {
+    errors.push('"primary_keyword" must be a string.');
+  }
 
-  const viewport = $('meta[name="viewport"]').first().attr("content");
-  if (!viewport) warnings.push('No <meta name="viewport"> found.');
-
-  const ogImage = $('meta[property="og:image"]').first().attr("content");
-  if (!ogImage) warnings.push('No <meta property="og:image"> — post will publish without a social/listing image.');
-
-  const twitterCard = $('meta[name="twitter:card"]').first().attr("content");
-  if (!twitterCard) warnings.push('No <meta name="twitter:card"> found.');
-
-  return { valid: errors.length === 0, errors, warnings, slug };
+  return { valid: errors.length === 0, errors, warnings };
 }
