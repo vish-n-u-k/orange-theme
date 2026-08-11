@@ -1,0 +1,13 @@
+[
+  {
+    "slug": "debug-test-post",
+    "title": "Debug Test Post",
+    "description": "A short test description for debugging the publish pipeline end to end.",
+    "image": null,
+    "tags": [
+      "Test"
+    ],
+    "publishedAt": "2026-08-11T10:59:56.457Z",
+    "updatedAt": "2026-08-11T10:59:56.457Z"
+  }
+]
