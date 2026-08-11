@@ -1,0 +1,16 @@
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+
+# Netlify installs each function's own package.json dependencies
+# automatically as part of the functions bundling step — independent of
+# the [build] step above, so this doesn't touch how the static site itself
+# deploys.
+
+[[redirects]]
+  from = "/mcp"
+  to = "/.netlify/functions/mcp-publish"
+  status = 200
+  force = true

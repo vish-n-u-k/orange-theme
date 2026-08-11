@@ -1,20 +1,18 @@
-# orange-theme blog publish MCP server
+# mcp-publish (Netlify Function)
 
-A small, stateless MCP server exposing one tool, `publish_post`, so an
-external content tool (Frekto) can publish blog posts to this site.
-
-This site is plain static HTML with git-push-triggered auto-deploy
-(Netlify/Vercel/Pages) — there is no CMS or database. "Publishing" a post
-means committing a new `blog/<slug>/index.html` file to `main`; the
-existing auto-deploy takes it from there.
+Exposes one MCP tool, `publish_post`, so an external content tool (Frekto)
+can publish blog posts to this site. Runs as a Netlify Function in the
+same site/repo that already auto-deploys on push to `main` — no separate
+hosting platform.
 
 ```
 Frekto (MCP client)
   → calls publish_post over MCP, Authorization: Bearer <MCP_AUTH_TOKEN>
-  → this server validates + processes the submitted HTML
+  → https://<your-site>/mcp  (netlify.toml rewrites this to the function)
+  → this function validates + processes the submitted HTML
   → commits blog/<slug>/index.html (+ mirrored images, + listing/sitemap
     if the post is new) to main via the GitHub Contents API
-  → existing auto-deploy picks it up
+  → existing Netlify auto-deploy picks it up
   → post is live
 ```
 
@@ -22,14 +20,27 @@ Frekto (MCP client)
 
 1. **`MCP_AUTH_TOKEN`** — a value you make up yourself (e.g.
    `openssl rand -hex 32`). Put the same value in Frekto's MCP client
-   config and in this server's `MCP_AUTH_TOKEN` env var. It authenticates
-   Frekto to this server. GitHub never sees it.
+   config and in this Netlify site's env vars. It authenticates Frekto to
+   this function. GitHub never sees it.
 2. **`GITHUB_TOKEN`** — a GitHub fine-grained Personal Access Token,
    scoped to **only this repo**, with **Contents: Read and write**
-   permission and nothing else. This server uses it to commit. Frekto
+   permission and nothing else. This function uses it to commit. Frekto
    never sees it.
 
-Never reuse one value for both.
+### Where to set them
+
+**Netlify (production):** Site configuration → Environment variables →
+add `MCP_AUTH_TOKEN`, `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`,
+`GITHUB_BRANCH`, and (optional) `SITE_BASE_URL`. Netlify injects these
+into the function at runtime — nothing to deploy or redeploy manually
+after adding them, the next invocation just picks them up. Since a
+`netlify.toml` now exists in this repo, double check Netlify's build
+settings UI doesn't have a conflicting publish directory from before —
+`publish = "."` here matches serving `index.html` straight from repo
+root, which is what you had already.
+
+**Local testing:** copy `.env.example` (repo root) to `.env` and fill it
+in — `netlify dev` reads it automatically.
 
 ## What `publish_post` does per call
 
@@ -59,34 +70,38 @@ Never reuse one value for both.
 
 ## Running locally
 
+From the repo root, with the [Netlify CLI](https://docs.netlify.com/cli/get-started/)
+installed:
+
 ```bash
-cd mcp-server
 cp .env.example .env   # fill in MCP_AUTH_TOKEN, GITHUB_TOKEN, SITE_BASE_URL
-npm install
-npm start
+netlify dev
 ```
 
-The server listens on `POST /mcp` (streamable HTTP transport) and
-`GET /healthz` (unauthenticated, for host health checks).
+This serves the static site and the function together, matching the
+deployed runtime. The tool endpoint is `http://localhost:8888/mcp`.
 
-## Deploying
+Without the Netlify CLI, you can also run the same protocol logic
+directly as a plain Node HTTP server (skips Netlify's event/response
+translation, but exercises the same `mcp-core.js`):
 
-Nothing in this repo implies existing backend infra, so any small host
-that gives you (a) a stable public HTTPS URL, (b) env var secrets, (c)
-outbound HTTPS works. **Render** is a good default for this: a free/small
-Node web service, git-deploy straight from this repo, HTTPS included, env
-vars in the dashboard. Railway or Fly.io work the same way if you already
-have an account there.
+```bash
+cd netlify/functions/mcp-publish
+npm install
+npm start   # listens on PORT (default 3000), POST /
+```
 
-Render setup:
+### Why no Express/framework here
 
-1. New Web Service → connect this GitHub repo.
-2. Root directory: `mcp-server`
-3. Build command: `npm install`
-4. Start command: `npm start`
-5. Add env vars: `MCP_AUTH_TOKEN`, `GITHUB_TOKEN`, `GITHUB_OWNER`,
-   `GITHUB_REPO`, `GITHUB_BRANCH`, `SITE_BASE_URL`.
-6. Deploy. Your MCP endpoint is `https://<service>.onrender.com/mcp`.
+The whole function is one POST endpoint handling one JSON-RPC message at
+a time — no routing, no streaming, no sessions. `mcp-core.js` wires the
+MCP SDK's `McpServer` directly to a ~10-line in-process transport
+(`start`/`send`/`close`/`onmessage`, the transport interface the SDK
+itself defines) instead of going through its Node-HTTP transport, which
+internally bridges to Web Standard Request/Response for SSE streaming
+support this endpoint doesn't need. `mcp-publish.js` (Netlify handler)
+and `local.js` (plain `http.createServer`) are both thin adapters calling
+into the same `handleMcpRequest()`.
 
 ## GitHub token setup
 
@@ -98,13 +113,14 @@ Render setup:
 
 ## Frekto config
 
-Point Frekto's MCP client at this server with the shared secret:
+Point Frekto's MCP client at this site's `/mcp` path with the shared
+secret:
 
 ```json
 {
   "mcpServers": {
     "orange-theme-blog": {
-      "url": "https://<service>.onrender.com/mcp",
+      "url": "https://<your-site>.netlify.app/mcp",
       "headers": {
         "Authorization": "Bearer <MCP_AUTH_TOKEN value>"
       }
@@ -114,7 +130,8 @@ Point Frekto's MCP client at this server with the shared secret:
 ```
 
 (Exact config shape depends on Frekto's MCP client — adjust keys as
-needed, the important part is the `Authorization: Bearer` header.)
+needed, the important part is the `Authorization: Bearer` header hitting
+`/mcp` on your Netlify site's domain.)
 
 ## Not yet wired up
 
