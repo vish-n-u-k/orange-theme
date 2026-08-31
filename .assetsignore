@@ -1,0 +1,9 @@
+netlify/
+netlify.toml
+wrangler.jsonc
+.assetsignore
+.gitignore
+.env
+.env.example
+README.md
+.git/
